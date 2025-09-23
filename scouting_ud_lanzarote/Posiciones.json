@@ -1,0 +1,72 @@
+[
+    {
+        "fields": {
+            "Posición": "Central"
+        }
+    },
+    {
+        "fields": {
+            "Posición": "Central derecho"
+        }
+    },
+    {
+        "fields": {
+            "Posición": "Central izquierdo"
+        }
+    },
+    {
+        "fields": {
+            "Posición": "Lateral"
+        }
+    },
+    {
+        "fields": {
+            "Posición": "Lateral derecho"
+        }
+    },
+    {
+        "fields": {
+            "Posición": "Lateral izquierdo"
+        }
+    },
+    {
+        "fields": {
+            "Posición": "Mediocentro"
+        }
+    },
+    {
+        "fields": {
+            "Posición": "Interior"
+        }
+    },
+    {
+        "fields": {
+            "Posición": "Mediapunta"
+        }
+    },
+    {
+        "fields": {
+            "Posición": "Extremo"
+        }
+    },
+    {
+        "fields": {
+            "Posición": "Extremo derecho"
+        }
+    },
+    {
+        "fields": {
+            "Posición": "Extremo izquierdo"
+        }
+    },
+    {
+        "fields": {
+            "Posición": "Delantero"
+        }
+    },
+    {
+        "fields": {
+            "Posición": "Portero"
+        }
+    }
+]
