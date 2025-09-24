@@ -1,0 +1,29 @@
+[
+    {
+        "fields": {
+            "Nombre scout": "Scout 3",
+            "Contraseña" : "scout3",
+            "Correo electrónico": "scout3@gmail.com",
+            "Teléfono": "625",
+            "Procedencia" :"Club"
+        }
+    },
+    {
+        "fields": {
+            "Nombre scout": "Scout 1",
+            "Contraseña" : "scout1",
+            "Correo electrónico": "scout1@gmail.com",
+            "Teléfono": "623",
+            "Procedencia" :"Externo"
+        }
+    },
+    {
+        "fields": {
+            "Nombre scout": "Scout 2",
+            "Contraseña" : "scout2",
+            "Correo electrónico": "scout2@gmail.com",
+            "Teléfono": "624",
+            "Procedencia" :"Club"
+        }
+    }
+]
