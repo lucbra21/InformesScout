@@ -6,14 +6,11 @@ from datetime import datetime, date
 from fpdf import FPDF
 import matplotlib.pyplot as plt
 import numpy as np
-import plotly.express as px
 
 # === LOGIN CON ROLES ===
 USERS = {
     "admin": {"password": "admin", "role": "admin"},
-    "scout 1": {"password": "scout1", "role": "scout"},
-    "scout 2": {"password": "scout2", "role": "scout"},
-    "scout 3": {"password": "scout3", "role": "scout"},
+    "scout": {"password": "scout123", "role": "scout"}
 }
 
 if "logged_in" not in st.session_state:
@@ -35,7 +32,6 @@ if not st.session_state.logged_in:
             if usuario in USERS and contraseña == USERS[usuario]["password"]:
                 st.session_state.logged_in = True
                 st.session_state.role = USERS[usuario]["role"]
-                st.session_state.scout_name = usuario # guardar nombre del scout
                 st.success(f"✅ Bienvenido, {usuario} ({st.session_state.role})")
                 st.rerun()
             else:
@@ -102,7 +98,7 @@ if "show_create_report_form" not in st.session_state:
     st.session_state.show_create_report_form = False
 
 #  FUNCIÓN DE GENERACIÓN DE PDF (FPDF2) #
-def generar_pdf(informe, logo_path="ud_lanzarote_logo3.png", logo_path_wm="ud_lanzarote_logo3bn.png", ttf_path="DejaVuSans.ttf"):
+def generar_pdf(informe, logo_path="ud_lanzarote_logo.png"):
     """
     Genera un PDF con encabezado diferenciado, escudo, línea divisoria,
     tabla de atributos, tabla de estadísticas y bloque de observaciones.
@@ -110,65 +106,48 @@ def generar_pdf(informe, logo_path="ud_lanzarote_logo3.png", logo_path_wm="ud_la
     """
     # Nombre de fichero (reemplazamos espacios por guiones)
     jugador_safe = str(informe.get("Jugador", "desconocido")).replace(" ", "_")
-    fecha_safe = str(informe.get("Fecha informe", datetime.today().strftime("%d-%m-%Y")))
+    fecha_safe = str(informe.get("Fecha informe", datetime.today().strftime("%Y-%m-%d")))
     file_name = f"Informe_{jugador_safe}_{fecha_safe}.pdf"
     pdf = FPDF(unit="mm", format="A4")
     pdf.set_auto_page_break(auto=True, margin=15)
     pdf.add_page()
-    
 
     # Página y dimensiones
     page_w = pdf.w - 2 * pdf.l_margin  # ancho
     left_x = pdf.l_margin
 
-    # Registrar fuente Unicode
-    if os.path.exists(ttf_path):
-        pdf.add_font("DejaVu", "", ttf_path, uni=True)
-        pdf.set_font("DejaVu", "", 14)
-    else:
-        pdf.set_font("Arial", "", 12)  # fallback
-
-    # --- Marca de agua ---
-    if os.path.exists(logo_path_wm):
-        try:
-            watermark_w = 160
-            watermark_h = 240
-            x = (pdf.w - watermark_w) / 2
-            y = (pdf.h - watermark_h) / 1.3
-            pdf.image(logo_path_wm, x, y, watermark_w, watermark_h)
-        except:
-            pass
-
+    # Encabezado con fondo claro
+    header_h = 30
+    pdf.set_fill_color(245, 245, 245)  # color fondo encabezado
+    pdf.rect(left_x - 1, 10, page_w + 2, header_h, style="F")  # rectángulo de fondo
 
     # Logo (si existe)
     if os.path.exists(logo_path):
         try:
-            logo_w = 30 
-            logo_h = 40
-            pdf.image(logo_path, left_x , 2.5, logo_w, logo_h)
+            logo_w = 36
+            logo_h = 36
+            pdf.image(logo_path, left_x + 2, 2.5, logo_w, logo_h)
         except Exception:
             # si hay problema con imagen, ignoramos
             pass
 
     # Título centralizado dentro del encabezado
-    pdf.set_xy(left_x, 5)
-    pdf.set_font("DejaVu", "", 20)
-    title = f"Sistema de Scouting UD Lanzarote"
-    pdf.cell(page_w, 10, title, ln=1, align="C")
+    pdf.set_xy(left_x, 12)
+    pdf.set_font("Arial", "B", 16)
+    title = f"Informe de Jugador"
+    pdf.cell(page_w, 7, title, ln=1, align="C")
 
     # Nombre del jugador (debajo del título)
-    pdf.set_y(pdf.get_y() + 5)  # añadimos 10 mm de espacio
-    pdf.set_font("DejaVu", "", 16)
-    jugador_text = f"Jugador: {informe.get("Jugador", "")}"
+    pdf.set_font("Arial", "B", 14)
+    jugador_text = informe.get("Jugador", "")
     pdf.cell(page_w, 8, jugador_text, ln=1, align="C")
 
     # Subtítulo con fecha y scout
-    pdf.set_y(pdf.get_y() + 5)  # añadimos 10 mm de espacio
-    pdf.set_font("DejaVu", "", 12+1)
-    subt = f"Fecha de informe: {informe.get('Fecha informe','')}    -    Scout: {informe.get('Scout','')}"
-    pdf.cell(page_w, 7, subt, ln=1, align="C")
+    pdf.set_font("Arial", "", 11)
+    subt = f"Fecha: {informe.get('Fecha informe','')}    -    Scout: {informe.get('Scout','')}"
+    pdf.cell(page_w, 6, subt, ln=1, align="C")
 
-    pdf.ln(4)
+    pdf.ln(6)
 
     # Línea divisoria de color (roja)
     pdf.set_draw_color(200, 0, 0)
@@ -177,96 +156,72 @@ def generar_pdf(informe, logo_path="ud_lanzarote_logo3.png", logo_path_wm="ud_la
     pdf.line(left_x, y_line, left_x + page_w, y_line)
     pdf.ln(6)
 
+    # Atributos valorables: cabecera de tabla (En futuro igual meter estrellas? + visual)
+    pdf.set_font("Arial", "B", 12)
+    pdf.cell(0, 8, " Atributos valorables", ln=1)
+    pdf.ln(2)
+
     # Table layout
     name_col = int(page_w * 0.75)  # columna nombre atributo
     val_col = int(page_w * 0.25)   # columna valor
     row_h = 8
 
-    # Cabecera de la tabla Atributos
-    pdf.set_font("DejaVu", "", 12)
+    # Cabecera de la tabla
+    pdf.set_font("Arial", "B", 10)
     pdf.set_fill_color(230, 230, 230)
-    pdf.cell(name_col, row_h, "Atributos valorables", border=0, fill=True)
-    pdf.cell(val_col, row_h, "Valor (0-5)", border=0, fill=True, align="C", ln=1)
+    pdf.cell(name_col, row_h, "Atributo", border=1, fill=True)
+    pdf.cell(val_col, row_h, "Valor (0-5)", border=1, fill=True, ln=1)
 
     # Filas: usamos multi_cell para el nombre por si se parte
-    pdf.set_font("DejaVu", "", 12)
+    pdf.set_font("Arial", "", 10)
     for attr in ATRIBUTOS_VALORABLES:
         val = informe.get(attr, "")
         if str(val).strip() != "" and str(val) not in ["0", "0.0"]:
-            try:
-                val_num = max(0, min(5, int(round(float(val)))))
-                estrellas = "★" * val_num + "☆" * (5 - val_num)
-            except Exception:
-                estrellas = "N/A"  # fallback en caso de error
             x_before = pdf.get_x()
             y_before = pdf.get_y()
-            pdf.multi_cell(name_col, row_h, str(attr), border=0)
+            pdf.multi_cell(name_col, row_h, str(attr), border=1)
             y_after_name = pdf.get_y()
             pdf.set_xy(left_x + name_col, y_before)
-            pdf.multi_cell(val_col, row_h, estrellas, border=0, align="C")
+            pdf.multi_cell(val_col, row_h, str(val), border=1, align="C")
             pdf.set_xy(left_x, max(y_after_name, pdf.get_y()))
     pdf.ln(6)
            
-    # Cabecera tabla estadísticas
-    pdf.set_font("DejaVu", "", 12)
-    pdf.set_fill_color(230, 230, 230)
-    pdf.cell(name_col, row_h, "Datos estadísticos", border=0, fill=True)
-    pdf.cell(val_col, row_h, "Valor", border=0, fill=True,align="C", ln=1)
+    # Estadísticas / porcentajes 
+    pdf.set_font("Arial", "B", 12)
+    pdf.cell(0, 8, " Estadísticas", ln=1)
+    pdf.ln(2)
 
-    pdf.set_font("DejaVu", "", 12)
+    # Cabecera tabla estadísticas
+    pdf.set_font("Arial", "B", 10)
+    pdf.set_fill_color(230, 230, 230)
+    pdf.cell(name_col, row_h, "Indicador", border=1, fill=True)
+    pdf.cell(val_col, row_h, "Valor", border=1, fill=True, ln=1)
+
+    pdf.set_font("Arial", "", 10)
     for stat in ATRIBUTOS_PORCENTAJE:
         val = informe.get(stat, "")
         if str(val).strip() != "" and str(val) not in ["0", "0.0"]:   # 👈 filtro
             x_before = pdf.get_x()
             y_before = pdf.get_y()
-            pdf.multi_cell(name_col, row_h, str(stat), border=0)
+            pdf.multi_cell(name_col, row_h, str(stat), border=1)
             y_after_name = pdf.get_y()
             pdf.set_xy(left_x + name_col, y_before)
-            pdf.multi_cell(val_col, row_h, f"{val}%", border=0, align="C")
+            pdf.multi_cell(val_col, row_h, f"{val}%", border=1, align="C")
             pdf.set_xy(left_x, max(y_after_name, pdf.get_y()))
     pdf.ln(8)
         
     # Observaciones
     obs = informe.get("Observaciones", "")
     if obs:
-        # Encabezado "Observaciones"
-        pdf.set_font("DejaVu", "", 12)
-        pdf.set_fill_color(230, 230, 230)  # mismo fondo que cabeceras anteriores
-        pdf.cell(name_col, row_h, "Observaciones", border=0, fill=True)
-        pdf.cell(val_col, row_h, "", border=0, fill=True, ln=1)  # segunda columna vacía
+        pdf.set_font("Arial", "B", 12)
+        pdf.cell(0, 8, " Observaciones", ln=1)
         pdf.ln(2)
-        pdf.set_font("DejaVu", "", 12)
-
-        # Cuadro de texto blanco para observaciones
-        y_start = pdf.get_y()
-        pdf.set_fill_color(255, 255, 255)  # fondo blanco
-        pdf.rect(left_x, y_start, page_w, 40, style="F")
-        pdf.set_xy(left_x, y_start)
-        pdf.multi_cell(0, 6, obs, border=0, fill=True)  # border=1 usa el color y grosor activos
+        pdf.set_font("Arial", "", 11)
+        pdf.multi_cell(0, 6, obs)
 
     # Guardar fichero
     pdf.output(file_name)
     return file_name
-
-# === Función para estadísticas generales ===
-def get_statistics(df):
-    """Obtener estadísticas generales del sistema y mostrarlas en Streamlit"""
-    if df.empty:
-        st.info("No hay reportes para analizar")
-        return
-    
-    stats = {
-        'total_reportes': len(df),
-        'scouts_activos': df['Scout'].nunique() if 'Scout' in df else 0,
-        'jugadores_evaluados': df['Jugador'].nunique() if 'Jugador' in df else 0,
-    }
-
-    # Mostrar estadísticas generales
-    
-    col1, col2, col3 = st.columns(3)
-    col1.metric("📑 Total de reportes", stats['total_reportes'])
-    col2.metric("🕵️ Scouts activos", stats['scouts_activos'])
-    col3.metric("👟 Jugadores evaluados", stats['jugadores_evaluados'])
 
 # === INTERFAZ STREAMLIT ===
 st.set_page_config(page_title="Scouting UD Lanzarote", layout="wide")
@@ -277,10 +232,10 @@ st.title("📊 Scouting   UD Lanzarote")
 logo_path = "ud_lanzarote_logo3.png"  # Asegúrate de que este archivo está en la misma carpeta que el app.py
 if os.path.exists(logo_path):
     st.sidebar.image(logo_path, width=160)
-st.sidebar.title("UD Lanzarote")
+st.sidebar.title("Menú")
 # Menú lateral según rol
 if st.session_state.role == "admin":
-    menu = st.sidebar.radio("", ["Dashboard"] + TABLES + ["Formulario", "Buscar jugador", "Comparativa"])
+    menu = st.sidebar.radio("", TABLES + ["Formulario", "Radar"])
 elif st.session_state.role == "scout":
     menu = st.sidebar.radio("", ["Formulario"])
 # --- Botón de Cerrar sesión ---
@@ -290,123 +245,6 @@ if st.sidebar.button("🚪 Cerrar sesión"):
     st.rerun()
 # Cargar la tabla seleccionada
 df, path = load_table(menu)
-
-# ---------------------------
-# CREAR UN DASHBOARD
-# ---------------------------
-if menu == "Dashboard":
-
-    informes, _ = load_table("Informes")
-
-    if informes.empty:
-        st.info("No hay informes disponibles todavía.")
-    else:
-        get_statistics(informes)
-        # === Gráfico 1: Informes por scout (tarta) ===
-        col1, col2 = st.columns(2)
-        with col1:
-            st.markdown("🕵️ Scouts")
-            informes_por_scout = informes["Scout"].value_counts().reset_index()
-            informes_por_scout.columns = ["Scout", "Total"]
-            fig1 = px.pie(informes_por_scout, names="Scout", values="Total", hole=0.3, color_discrete_sequence=["#2600ff", "#00b7ff", "#ff9633", "#ff0000"]) 
-            fig1.update_layout(legend=dict(x=-0.1))  # mueve horizontal (izquierda)
-            
-            st.plotly_chart(fig1, use_container_width=True)
-
-        # === Gráfico 2: Informes por posición (barras) ===
-        with col2:
-            st.markdown("⚽ Posiciones")
-            if "Posición" in informes.columns:
-                informes_por_pos = informes["Posición"].value_counts().reset_index()
-                informes_por_pos.columns = ["Posición", "Total"]
-                informes_por_pos = informes_por_pos.sort_values("Total", ascending=False)
-                fig2 = px.bar(
-                    informes_por_pos,
-                    x="Total",
-                    y="Posición",
-                    orientation="h",
-                    text="Total",
-                    color_discrete_sequence=["#ff0000"]
-                )
-                # Quitar títulos, números y líneas de cuadrícula
-                fig2.update_yaxes(title=None, showgrid=False, autorange="reversed")
-                fig2.update_xaxes(showticklabels=False, title=None, showgrid=False)
-                st.plotly_chart(fig2, use_container_width=True)
-
-        # === Panel de jugadores destacados ===
-        col3, col4 = st.columns(2)
-        with col3:
-            st.markdown("🌟 Jugadores destacados")
-
-            atributos_cols = [c for c in informes.columns if c in ATRIBUTOS_VALORABLES]
-            if atributos_cols:
-                informes_num = informes.copy()
-                for col in atributos_cols:
-                    informes_num[col] = pd.to_numeric(informes_num[col], errors="coerce")
-
-                informes_num[atributos_cols] = informes_num[atributos_cols].replace(0, np.nan) # ignorar ceros
-                media_global = informes_num[atributos_cols].mean().mean()
-                medias_jugador = informes_num.groupby("Jugador")[atributos_cols].mean().mean(axis=1)
-
-                destacados = medias_jugador[medias_jugador > media_global].sort_values(ascending=False)
-
-                if destacados.empty:
-                    st.info("No hay jugadores por encima de la media global.")
-                else:
-                    # Mostrar solo top 5
-                    top5 = destacados.head(5)
-
-                    # Crear grid de 2 columnas
-                    cols = st.columns(2)
-                    for i, (jugador, media) in enumerate(top5.items()):
-                        estrellas_llenas = int(round(media))
-                        estrellas = "⭐" * estrellas_llenas + "☆" * (5 - estrellas_llenas)
-
-                        # Elegir columna alternando
-                        with cols[i % 2]:
-                            st.markdown(
-                                f"""
-                                <div style="width:150px; height:150px;
-                                            padding:15px; border-radius:12px;
-                                            margin-bottom:15px; 
-                                            background-color:#2c2c2c;
-                                            border:2px solid #e74c3c;
-                                            box-shadow:0px 4px 8px rgba(0,0,0,0.1);">
-                                    <h4 style="margin:0; font-size:18px; color:#ecf0f1;">{jugador}</h4>
-                                    <p style="margin:5px 0; font-size:16px; color:#f1c40f;">{estrellas}</p>
-                                    <p style="margin:0; font-size:14px; color:#bdc3c7;">{media:.2f} / 5</p>
-                                </div>
-                                """,
-                                unsafe_allow_html=True
-                            )
-        # === Gráfico 3: Acciones (columnas) ===
-        with col4:
-            st.markdown("🎯 Acción")
-            if "Acción" in informes.columns:
-                informes_por_accion = informes["Acción"].value_counts().reset_index()
-                informes_por_accion.columns = ["Acción", "Total"]
-
-                colores_accion = {
-                    "Fichar": "#2ecc71",
-                    "Seguir ojeando": "#e67e22",
-                    "Descartar": "#e74c3c"
-                }
-
-                fig3 = px.bar(
-                    informes_por_accion,
-                    x="Acción",
-                    y="Total",
-                    text="Total",
-                    color="Acción",
-                    color_discrete_map=colores_accion,
-                    category_orders={"Acción": ["Fichar", "Seguir ojeando", "Descartar"]}
-                )
-                # Quitar títulos, números y líneas de cuadrícula
-                fig3.update_xaxes(title=None, showgrid=False)
-                fig3.update_yaxes(showticklabels=False, title=None, showgrid=False)
-                fig3.update_layout(showlegend=False)
-                fig3.update_traces(textfont_color="black")
-                st.plotly_chart(fig3, use_container_width=True)
 
 # ---------------------------
 # CREAR SCOUT (form persistente con session_state)
@@ -436,7 +274,7 @@ if menu == "Scouts":
                 # Si la columna parece de fecha, usar date_input
                 if "fecha" in col_name.lower():
                     valor = st.date_input(col_name, value=date.today(), key=f"ns_{col_name}")
-                    nuevo_scout[col_name] = valor.strftime("%d-%m-%Y")
+                    nuevo_scout[col_name] = valor.strftime("%Y-%m-%d")
                 else:
                     # texto por defecto
                     valor = st.text_input(col_name, key=f"ns_{col_name}")
@@ -484,7 +322,7 @@ if menu == "Jugadores":
                 max_value=date.today(),
                 key="nj_fecha"
             )
-            nuevo_jugador["Fecha de nacimiento"] = fecha_nac.strftime("%d-%m-%Y")
+            nuevo_jugador["Fecha de nacimiento"] = fecha_nac.strftime("%Y-%m-%d")
             nuevo_jugador["Club"] = st.text_input("Club", key="nj_club")
             nuevo_jugador["Sub 23"] = st.selectbox("Sub 23", ["Sí", "No"], key="nj_sub23")
 
@@ -510,22 +348,8 @@ if menu == "Jugadores":
 # CREAR FORMULARIO (form persistente)
 # ---------------------------
 if menu == "Formulario":
-    st.markdown("""
-    <style>
-    /* Reducir márgen superior general */
-    .css-18e3th9 {padding-top: 1rem;}
-    
-    /* Inputs y selectboxes ocupan todo el ancho en móviles */
-    @media (max-width: 768px) {
-        .stTextInput, .stSelectbox, .stSlider, .stNumberInput, .stTextArea {
-            width: 100% !important;
-        }
-    }
-    </style>
-    """, unsafe_allow_html=True)
-
     st.subheader("📝 Crear informes")
-    col_nuevo, col_nuevo_unreg = st.columns([1, 1])
+    col_nuevo, col_nuevo_unreg = st.columns(2)
 
     if col_nuevo.button("📝 Nuevo informe de jugador registrado"):
         st.session_state.show_create_report_form = True
@@ -534,48 +358,42 @@ if menu == "Formulario":
     if col_nuevo_unreg.button("📝 Nuevo informe de jugador no registrado"):
         st.session_state.show_create_unreg_report_form = True
         st.session_state.show_create_report_form = False
-
     # ---------------------------
     # Formulario normal (jugador registrado)
     # ---------------------------
     if st.session_state.get("show_create_report_form", False):
         with st.form("form_crear_informe"):
-            st.markdown('<h3 style="font-size:22px; margin-bottom:10px;">📋 Nuevo informe de jugador (registrado)</h3>', unsafe_allow_html=True)
+            st.write("### 📋 Nuevo informe de jugador (registrado)")
 
             if df.empty:
                 columnas = ["Fecha informe", "Scout","Temporada", "Competición", "Equipo local", "Equipo visitante", "Jugador", "Posición", "Lateralidad", "Acción", "Observaciones"] + ATRIBUTOS_VALORABLES + ATRIBUTOS_PORCENTAJE
+
             else:
                 columnas = df.columns.tolist()
-
             scouts_df, _ = load_table("Scouts")
             jugadores_df, _ = load_table("Jugadores")
             posiciones_df, _ = load_table("Posiciones")
 
             nuevo_informe = {}
 
-            # Fecha del informe
+            # Fecha del informe (siempre arriba)
             fecha_informe = st.date_input("Fecha del informe", value=date.today(), key="ni_fecha")
-            nuevo_informe["Fecha informe"] = fecha_informe.strftime("%d-%m-%Y")
+            nuevo_informe["Fecha informe"] = fecha_informe.strftime("%Y-%m-%d")
 
             # Campos descriptivos (en una sola columna)
-            campos_descriptivos = [col for col in columnas
+            campos_descriptivos = [
+                col for col in columnas
                 if col not in ["Sub 23", "Fecha de nacimiento", "Club", "Acción", "Observaciones", "Fecha informe"]
-                + ATRIBUTOS_VALORABLES + ATRIBUTOS_PORCENTAJE]
-
+                + ATRIBUTOS_VALORABLES + ATRIBUTOS_PORCENTAJE
+            ]
             for idx, col_name in enumerate(campos_descriptivos):
                 low = col_name.lower()
-                if low == "scout":
-                    if st.session_state.role == "admin":
-                        nuevo_informe[col_name] = st.selectbox(
-                            f"{col_name}:",
-                            scouts_df["Nombre scout"].dropna().unique(),
-                            key=f"ni_scout_{idx}"
-                        )
-                    else:
-                        nuevo_informe[col_name] = st.session_state.scout_name
+                if low == "scout" and not scouts_df.empty:
+                    nuevo_informe[col_name] = st.selectbox(f"{col_name}:", scouts_df["Nombre scout"].dropna().unique(), key=f"ni_scout_{idx}")
                 elif low == "jugador" and not jugadores_df.empty:
                     jugador_sel = st.selectbox(f"{col_name}:", jugadores_df["Nombre jugador"].dropna().unique(), key=f"ni_jugador_{idx}")
                     nuevo_informe[col_name] = jugador_sel
+                    # auto-completar
                     fila = jugadores_df.loc[jugadores_df["Nombre jugador"] == jugador_sel]
                     if not fila.empty:
                         if "Sub 23" in jugadores_df.columns:
@@ -591,24 +409,23 @@ if menu == "Formulario":
                 else:
                     nuevo_informe[col_name] = st.text_input(f"{col_name}:", key=f"ni_txt_{idx}")
 
-            # Atributos (sliders) en 3 columnas adaptativas
+            # Atributos (sliders) en 3 columnas
             atributos = [a for a in columnas if a in ATRIBUTOS_VALORABLES]
             if atributos:
-                st.markdown('<h4 style="font-size:18px;">⚡ Atributos valorables</h4>', unsafe_allow_html=True)
-                num_cols = min(3, len(atributos))
+                st.markdown("#### ⚡ Atributos valorables")
+                num_cols = 3
                 cols_sl = st.columns(num_cols)
                 for idx, attr in enumerate(atributos):
                     c = cols_sl[idx % num_cols]
                     nuevo_informe[attr] = c.slider(attr, 0, 5, 0, 1, key=f"ni_attr_{idx}")
 
-            # Porcentajes (2 columnas adaptativas)
+            # Porcentajes (2 columnas)
             porcentajes = [a for a in columnas if a in ATRIBUTOS_PORCENTAJE]
             if porcentajes:
-                st.markdown('<h4 style="font-size:18px;">📊 Estadísticas</h4>', unsafe_allow_html=True)
-                num_cols = min(2, len(porcentajes))
-                cols_pct = st.columns(num_cols)
+                st.markdown("#### 📊 Estadísticas")
+                c1, c2 = st.columns(2)
                 for idx, stat in enumerate(porcentajes):
-                    target = cols_pct[idx % num_cols]
+                    target = c1 if idx % 2 == 0 else c2
                     nuevo_informe[stat] = target.number_input(stat, min_value=0, max_value=100, step=1, key=f"ni_pct_{idx}")
 
             # Acción y Observaciones
@@ -631,27 +448,24 @@ if menu == "Formulario":
                 st.session_state.show_create_report_form = False
                 st.rerun()
 
+
     # ---------------------------
     # Formulario alternativo (jugador no registrado)
     # ---------------------------
     if st.session_state.get("show_create_unreg_report_form", False):
         with st.form("form_crear_informe_unreg"):
-            st.markdown('<h3 style="font-size:22px; margin-bottom:10px;">📋 Nuevo informe de jugador <b>no registrado</b></h3>', unsafe_allow_html=True)
+            st.write("### 📋 Nuevo informe de jugador **no registrado**")
 
             nuevo_informe = {}
 
-            # Campos del jugador no registrado (igual que antes)
+            # Fecha del informe
             fecha_informe = st.date_input("Fecha del informe", value=date.today(), key="niu_fecha")
-            nuevo_informe["Fecha informe"] = fecha_informe.strftime("%d-%m-%Y")
+            nuevo_informe["Fecha informe"] = fecha_informe.strftime("%Y-%m-%d")
 
+                # Scout
             scouts_df, _ = load_table("Scouts")
-            if st.session_state.role == "admin":
-                if not scouts_df.empty:
-                    nuevo_informe["Scout"] = st.selectbox(
-                        "Scout:", scouts_df["Nombre scout"].dropna().unique(), key="niu_scout"
-                    )
-            else:
-                nuevo_informe["Scout"] = st.session_state.scout_name
+            if not scouts_df.empty:
+                nuevo_informe["Scout"] = st.selectbox("Scout:", scouts_df["Nombre scout"].dropna().unique(), key="niu_scout")
 
             # Datos manuales del jugador
             nuevo_informe["Temporada"] = st.text_input("Temporada", key="niu_temporada")
@@ -660,31 +474,32 @@ if menu == "Formulario":
             nuevo_informe["Equipo visitante"] = st.text_input("Equipo visitante", key="niu_visitante")
             nuevo_informe["Jugador"] = st.text_input("Nombre jugador", key="niu_jugador")
             fecha_nac = st.date_input("Fecha de nacimiento", min_value=date(1900,1,1), max_value=date.today(), value=date.today(), key="niu_fnac")
-            nuevo_informe["Fecha de nacimiento"] = fecha_nac.strftime("%d-%m-%Y")
+            nuevo_informe["Fecha de nacimiento"] = fecha_nac.strftime("%Y-%m-%d")
             nuevo_informe["Club"] = st.text_input("Club", key="niu_club")
             nuevo_informe["Sub 23"] = st.selectbox("Sub 23", ["Sí", "No"], key="niu_sub23")
 
+            # Posición
             posiciones_df, _ = load_table("Posiciones")
             if not posiciones_df.empty:
                 nuevo_informe["Posición"] = st.selectbox("Posición:", posiciones_df.iloc[:, 0].dropna().unique(), key="niu_pos")
 
+            # Lateralidad
             nuevo_informe["Lateralidad"] = st.selectbox("Lateralidad:", ["Diestro", "Zurdo", "Ambas"], key="niu_lat")
 
-            # Atributos y porcentajes (igual que antes, adaptando columnas)
-            st.markdown('<h4 style="font-size:18px;">⚡ Atributos valorables</h4>', unsafe_allow_html=True)
-            num_cols = min(3, len(ATRIBUTOS_VALORABLES))
+            # Atributos (sliders)
+            st.markdown("#### ⚡ Atributos valorables")
+            num_cols = 3
             cols_sl = st.columns(num_cols)
             for idx, attr in enumerate(ATRIBUTOS_VALORABLES):
-                cols_sl[idx % num_cols].slider(attr, 0, 5, 0, 1, key=f"nr_attr_{idx}")
-                nuevo_informe[attr] = st.session_state.get(f"nr_attr_{idx}", 0)
+                nuevo_informe[attr] = cols_sl[idx % num_cols].slider(attr, 0, 5, 0, 1, key=f"nr_attr_{idx}")
 
+            # Porcentajes
             porcentajes = [a for a in df.columns if a in ATRIBUTOS_PORCENTAJE]
             if porcentajes:
-                st.markdown('<h4 style="font-size:18px;">📊 Estadísticas</h4>', unsafe_allow_html=True)
-                num_cols = min(2, len(porcentajes))
-                cols_pct = st.columns(num_cols)
+                st.markdown("#### 📊 Estadísticas")
+                c1, c2 = st.columns(2)
                 for idx, stat in enumerate(porcentajes):
-                    target = cols_pct[idx % num_cols]
+                    target = c1 if idx % 2 == 0 else c2
                     nuevo_informe[stat] = target.number_input(stat, min_value=0, max_value=100, step=1, key=f"niu_pct_{idx}")
 
             # Acción y Observaciones
@@ -696,8 +511,10 @@ if menu == "Formulario":
             cancelar = col_cancel.form_submit_button("❌ Cancelar")
 
             if guardar and nuevo_informe.get("Jugador", "").strip():
+                # Guardar informe en Informes
                 add_new_record("Informes", nuevo_informe)
 
+                # Guardar también el jugador en la tabla Jugadores si no existe
                 jugadores_df, jugadores_path = load_table("Jugadores")
                 nombre_jugador = nuevo_informe["Jugador"]
 
@@ -718,148 +535,10 @@ if menu == "Formulario":
                 st.success("Nuevo informe (jugador no registrado) añadido correctamente ✅")
                 st.session_state.show_create_unreg_report_form = False
                 st.rerun()
-
             if cancelar:
                 st.session_state.show_create_unreg_report_form = False
                 st.rerun()
 
-
-# === Pestaña Comparativa ===
-if menu == "Comparativa":
-    st.subheader("🆚 Comparativa de Jugadores")
-
-    jugadores_df, _ = load_table("Jugadores")
-    informes_df, _ = load_table("Informes")
-
-    if jugadores_df.empty or informes_df.empty:
-        st.info("No hay jugadores o informes para comparar todavía.")
-    else:
-        # Filtro opcional de posición
-        posiciones = informes_df["Posición"].dropna().unique().tolist()
-        pos_sel = st.selectbox("Filtrar por posición (opcional)", ["Todas"] + posiciones)
-
-        # Filtrar dataframe según posición si se ha elegido una específica
-        if pos_sel != "Todas":
-            informes_filtrados = informes_df[informes_df["Posición"] == pos_sel]
-        else:
-            informes_filtrados = informes_df.copy()
-        # Selección múltiple de jugadores
-        seleccionados = st.multiselect(
-            "Selecciona jugadores a comparar",
-            informes_filtrados["Jugador"].tolist()
-        )
-
-        if len(seleccionados) >= 2:
-            # Filtrar los jugadores seleccionados
-            jugadores_sel = informes_df[informes_df["Jugador"].isin(seleccionados)]
-
-            # Mostrar datos básicos
-            st.markdown("#### 📋 Datos del jugador")
-            st.dataframe(
-                jugadores_sel[["Jugador", "Club", "Fecha de nacimiento", "Posición", "Lateralidad"]],
-                use_container_width=True
-            )
-
-            # Calcular promedios de atributos (ignorando NaN y 0)
-            promedios = []
-            for jugador in seleccionados:
-                informes_jugador = informes_df[informes_df["Jugador"] == jugador]
-                if not informes_jugador.empty:
-                    # Convertir a numérico
-                    datos = informes_jugador[ATRIBUTOS_VALORABLES].apply(pd.to_numeric, errors="coerce")
-                    # Reemplazar 0 por NaN para que no cuente
-                    datos = datos.replace(0, np.nan)
-                    medias = datos.mean(skipna=True)
-                    medias["Nombre"] = jugador
-                    promedios.append(medias)
-
-            if promedios:
-                df_promedios = pd.DataFrame(promedios).set_index("Nombre")
-
-                # === Tarjetas de medias de jugadores seleccionados ===
-                st.markdown("#### 🌟 Valoración media")
-
-                # Crear fila de columnas, una por jugador
-                cols = st.columns(len(df_promedios))
-
-                for col, (jugador, fila) in zip(cols, df_promedios.iterrows()):
-                    media_jugador = fila.dropna().mean()  # promedio real ignorando NaN/ceros
-                    estrellas_llenas = int(round(media_jugador))
-                    estrellas = "⭐" * estrellas_llenas + "☆" * (5 - estrellas_llenas)
-
-                    with col:
-                        st.markdown(
-                            f"""
-                            <div style="width:150px; height:150px; 
-                                        padding:10px; border-radius:12px; 
-                                        display:flex; flex-direction:column; justify-content:center; align-items:center;
-                                        background-color:#2c2c2c;
-                                        border:2px solid #e74c3c;
-                                        box-shadow:0px 2px 6px rgba(0,0,0,0.1); 
-                                        margin:auto;">
-                                <h4 style="margin:0; font-size:18px; color:#ecf0f1; text-align:center;">{jugador}</h4>
-                                <p style="margin:5px 0; font-size:16px; color:#f1c40f; text-align:center;">{estrellas}</p>
-                                <p style="margin:0; font-size:14px; color:#bdc3c7; text-align:center;">{media_jugador:.2f} / 5</p>
-                            </div>
-                            """,
-                            unsafe_allow_html=True
-                        )
-
-                # Radar dinámico:
-                # 1. Eliminar solo columnas donde todos los jugadores tienen NaN
-                df_radar = df_promedios.dropna(axis=1, how="all").reset_index().melt(
-                    id_vars="Nombre",
-                    var_name="Atributo",
-                    value_name="Valor"
-                )
-                # 2. Quitar NaN, pero mantener atributos que tengan valor aunque sea en un solo jugador
-                df_radar = df_radar.dropna()
-
-                st.markdown("#### 🕸️ Radar comparativo")
-                fig = px.line_polar(
-                    df_radar,
-                    r="Valor",
-                    theta="Atributo",
-                    color="Nombre",
-                    line_close=True,
-                    range_r=[0, 5]
-                )
-
-                # Líneas más gruesas y rellenar con transparencia
-                fig.update_traces(line=dict(width=3), fill='toself')
-
-                # Configuración de ejes y fondo oscuro
-                fig.update_layout(
-                    polar=dict(
-                        bgcolor="#2c2c2c",  # Fondo del radar oscuro
-                        radialaxis=dict(
-                            tick0=0,
-                            dtick=1,
-                            tickfont=dict(color="#ecf0f1"),  # Números en blanco grisáceo
-                            showline=True,
-                            linewidth=1,
-                            linecolor="#bdc3c7",             # Ejes en gris claro
-                            gridcolor="#444"                 # Grilla tenue
-                        ),
-                        angularaxis=dict(
-                            tickfont=dict(color="#ecf0f1"),  # Atributos en blanco grisáceo
-                            linecolor="#bdc3c7",
-                            gridcolor="#444"
-                        )
-                    ),
-                    legend=dict(title_text="", font=dict(color="#ecf0f1")),  # Leyenda en blanco
-                    paper_bgcolor="#1e1e1e",   # Fondo de todo el gráfico oscuro
-                    plot_bgcolor="#1e1e1e",
-                    width=600,
-                    height=600
-                )
-
-                st.plotly_chart(fig, use_container_width=True)
-
-            else:
-                st.warning("Los jugadores seleccionados no tienen informes registrados.")
-        else:
-            st.info("Selecciona al menos 2 jugadores para la comparativa.")
 # ---------------------------
 # MOSTRAR / EDITAR TABLAS SEGÚN PESTAÑA
 # ---------------------------
@@ -977,123 +656,102 @@ if menu == "Informes" and not df.empty:
                 )
         except Exception as e:
             st.error(f"Error generando PDF: {e}")
-# === NUEVA PESTAÑA BUSCAR JUGADOR ===
-if menu == "Buscar jugador":
-    st.subheader("🔎 Buscar jugador")
-
-    # Cargar tablas
+# === NUEVA PESTAÑA RADAR ===
+if menu == "Radar":
+    st.subheader("📊 Radar de atributos")
+    # Cargar jugadores e informes
     jugadores, _ = load_table("Jugadores")
     informes, _ = load_table("Informes")
-
     if jugadores.empty or informes.empty:
         st.warning("No hay jugadores o informes disponibles todavía.")
     else:
-        # === Filtro por posición (opcional) ===
-        posiciones = informes["Posición"].dropna().unique().tolist()
-        posiciones.insert(0, "-- Todas --")  # opción por defecto
-        posicion_sel = st.selectbox("Selecciona posición:", posiciones, index=0)
-
-        if posicion_sel != "-- Todas --":
-            jugadores_filtrados = informes[informes["Posición"] == posicion_sel]
+        # Selector de jugador
+        jugador_seleccionado = st.selectbox(
+            "Selecciona un jugador:",
+            jugadores["Nombre jugador"].dropna().unique()
+        )
+        # Fila de informe más reciente para el jugador
+        informe_jugador = informes[informes["Jugador"] == jugador_seleccionado]
+        if informe_jugador.empty:
+            st.warning(f"No hay informes para {jugador_seleccionado}")
         else:
-            jugadores_filtrados = informes.copy()  # no filtra por posición
-
-        # === Filtro por jugador ===
-        jugadores_lista = jugadores_filtrados["Jugador"].dropna().unique().tolist()
-        jugadores_lista.insert(0, "")  # opción vacía
-        jugador_sel = st.selectbox("Selecciona jugador:", jugadores_lista, index=0)
-
-        if jugador_sel:  # solo continuar si hay jugador elegido
-            # Último informe del jugador seleccionado
-            informe_jugador = informes[informes["Jugador"] == jugador_sel]
-            if informe_jugador.empty:
-                st.warning(f"No hay informes para {jugador_sel}")
+            datos_jugador = informe_jugador.iloc[-1]  # último informe
+            # === Dividir atributos ===
+            atributos_portero = [
+            "Juego con los pies",
+            "Juego aéreo","Reflejos (Bajo palos)",
+            "Blocajes",
+            "Salidas (mano a mano)",
+            "Despejes",
+            "Velocidad de reacción",
+            "Colocación"
+            ]
+            atributos_defensa = [
+            "Salida de balón (corto)",
+            "Salida de balón (largo)",
+            "Duelos",
+            "Duelos aéreos",
+            "Resistencia",
+            "Velocidad",
+            "Precisión en el pase corto",
+            "Precisión en el pase largo",
+            "Presión mental",
+            "Liderazgo"     
+            ]
+            atributos_medios = [
+            "Colocación",
+            "Salida de balón (corto)",
+            "Salida de balón (largo)",
+            "Duelos",
+            "Duelos aéreos",
+            "Resistencia",
+            "Velocidad",
+            "Precisión en el pase corto",
+            "Precisión en el pase largo",
+            "Llegada al área rival",
+            "Presión mental",
+            "Liderazgo"                
+            ]
+            atributos_ataque = [
+            "Resistencia",
+            "Velocidad",
+            "Presión",
+            "Desmarques",
+            "Desborde",
+            "Gol",
+            "Descargas",
+            "Remate de cabeza",
+            "Disparos",
+            "Presión mental",
+            "Liderazgo",   
+            ]
+            grupo = st.radio("Selecciona grupo de atributos:",["Porteros", "Defensas", "Mediocampistas", "Atacantes"])
+            if grupo == "Porteros":
+                atributos = atributos_portero
+            elif grupo == "Defensas":
+                atributos = atributos_defensa
+            elif grupo == "Mediocampistas":
+                atributos = atributos_medios
             else:
-                datos_jugador = informe_jugador.iloc[-1]  # último informe
+                atributos = atributos_ataque
+            if st.button("🎯 Generar radar"):
+                # Filtrar valores
+                valores = [float(datos_jugador.get(attr, 0)) for attr in atributos]
+                # Crear gráfico radar
+                N = len(atributos)
+                valores += valores[:1]  # cerrar el polígono
+                angles = np.linspace(0, 2*np.pi, N, endpoint=False).tolist()
+                angles += angles[:1]
 
-                # === INFO DEL JUGADOR ===
-                jugador_info = informes[informes["Jugador"] == jugador_sel].iloc[0]
-                nombre = jugador_info.get("Jugador", "Desconocido")
-                fecha_nacimiento = jugador_info.get("Fecha de nacimiento", "Desconocida")
-                posicion = jugador_info.get("Posición", "Desconocida")
-                club = jugador_info.get("Club", "Desconocido")
-                lateralidad = jugador_info.get("Lateralidad", "Desconocida")
-                num_informes = len(informe_jugador)
+                fig, ax = plt.subplots(figsize=(6, 6), subplot_kw=dict(polar=True))
 
-                # Filtrar atributos con valores > 0
-                atributos_valorados = {
-                    attr: float(datos_jugador[attr])
-                    for attr in ATRIBUTOS_VALORABLES
-                    if attr in datos_jugador and pd.to_numeric(datos_jugador[attr], errors="coerce") > 0
-                }
+                ax.plot(angles, valores, linewidth=2, linestyle='solid')
+                ax.fill(angles, valores, alpha=0.25)
 
-                if len(atributos_valorados) == 0:
-                    st.warning("Este jugador no tiene atributos valorados todavía.")
-                else:
-                    media = np.mean(list(atributos_valorados.values()))
-
-                    # === Mostrar información del jugador en tarjeta oscura ===
-                    st.markdown(
-                        f"""
-                        <div style="
-                            padding:20px; 
-                            border-radius:12px; 
-                            margin-bottom:15px;
-                            background-color:#2c2c2c; 
-                            border:2px solid #e74c3c;
-                            color:#ecf0f1;
-                            box-shadow:0px 4px 8px rgba(0,0,0,0.2);
-                        ">
-                            <h3 style="margin:0 0 10px 0; color:#ecf0f1;">{nombre}</h3>
-                            <p style="margin:5px 0;"><strong>Fecha nacimiento🗓️:</strong> {fecha_nacimiento}</p>
-                            <p style="margin:5px 0;"><strong>Posición📍: </strong> {posicion}</p>
-                            <p style="margin:5px 0;"><strong>Club🏠:</strong> {club}</p>
-                            <p style="margin:5px 0;"><strong>Lateralidad🦵:</strong> {lateralidad}</p>
-                            <p style="margin:5px 0;"><strong>Número de informes📝:</strong> {num_informes}</p>
-                            <p style="margin:5px 0;"><strong>Promedio de atributos valorados⭐:</strong> {media:.2f} / 5</p>
-                        </div>
-                        """,
-                        unsafe_allow_html=True
-                    )
-
-                    # === RADAR PLOTLY ===
-                    df_radar = pd.DataFrame({
-                        "Atributo": list(atributos_valorados.keys()),
-                        "Valor": list(atributos_valorados.values()),
-                        "Jugador": [jugador_sel] * len(atributos_valorados)
-                    })
-
-                    fig = px.line_polar(
-                        df_radar,
-                        r="Valor",
-                        theta="Atributo",
-                        color="Jugador",
-                        line_close=True,
-                        range_r=[0, 5]
-                    )
-
-                    # Estilo oscuro
-                    fig.update_traces(line=dict(width=3), fill="toself")
-                    fig.update_layout(
-                        polar=dict(
-                            bgcolor="#2c2c2c",
-                            radialaxis=dict(
-                                tick0=0, dtick=1,
-                                tickfont=dict(color="#ecf0f1"),
-                                showline=True, linecolor="#bdc3c7", gridcolor="#444"
-                            ),
-                            angularaxis=dict(
-                                tickfont=dict(color="#ecf0f1"),
-                                linecolor="#bdc3c7", gridcolor="#444"
-                            )
-                        ),
-                        legend=dict(title_text="", font=dict(color="#ecf0f1")),
-                        paper_bgcolor="#1e1e1e",
-                        plot_bgcolor="#1e1e1e",
-                        width=600, height=600
-                    )
-
-                    st.plotly_chart(fig, use_container_width=True)
-
-
-
+                ax.set_xticks(angles[:-1])
+                ax.set_xticklabels(atributos, fontsize=9)
+                ax.set_yticks(range(0, 6))  # porque tus sliders son de 0 a 5
+                ax.set_title(f"Radar de {jugador_seleccionado}", size=14, weight="bold")
+                col1, col2, col3 = st.columns([1, 2, 1])
+                with col2:
+                    st.pyplot(fig)
