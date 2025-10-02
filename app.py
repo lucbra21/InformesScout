@@ -6,6 +6,7 @@ from datetime import datetime, date
 from fpdf import FPDF
 import matplotlib.pyplot as plt
 import numpy as np
+import plotly.express as px
 
 # === LOGIN CON ROLES ===
 USERS = {
@@ -293,8 +294,6 @@ df, path = load_table(menu)
 # ---------------------------
 # CREAR UN DASHBOARD
 # ---------------------------
-import plotly.express as px
-
 if menu == "Dashboard":
 
     informes, _ = load_table("Informes")
@@ -1095,5 +1094,6 @@ if menu == "Buscar jugador":
                     )
 
                     st.plotly_chart(fig, use_container_width=True)
+
 
 
