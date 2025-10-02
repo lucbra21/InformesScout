@@ -3,6 +3,3 @@ pandas
 numpy
 matplotlib
 fpdf2
-plotly
-json
-datetime
