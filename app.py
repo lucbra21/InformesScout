@@ -511,22 +511,8 @@ if menu == "Jugadores":
 # CREAR FORMULARIO (form persistente)
 # ---------------------------
 if menu == "Formulario":
-    st.markdown("""
-    <style>
-    /* Reducir márgen superior general */
-    .css-18e3th9 {padding-top: 1rem;}
-    
-    /* Inputs y selectboxes ocupan todo el ancho en móviles */
-    @media (max-width: 768px) {
-        .stTextInput, .stSelectbox, .stSlider, .stNumberInput, .stTextArea {
-            width: 100% !important;
-        }
-    }
-    </style>
-    """, unsafe_allow_html=True)
-
     st.subheader("📝 Crear informes")
-    col_nuevo, col_nuevo_unreg = st.columns([1, 1])
+    col_nuevo, col_nuevo_unreg = st.columns(2)
 
     if col_nuevo.button("📝 Nuevo informe de jugador registrado"):
         st.session_state.show_create_report_form = True
@@ -535,19 +521,18 @@ if menu == "Formulario":
     if col_nuevo_unreg.button("📝 Nuevo informe de jugador no registrado"):
         st.session_state.show_create_unreg_report_form = True
         st.session_state.show_create_report_form = False
-
     # ---------------------------
     # Formulario normal (jugador registrado)
     # ---------------------------
     if st.session_state.get("show_create_report_form", False):
         with st.form("form_crear_informe"):
-            st.markdown('<h3 style="font-size:22px; margin-bottom:10px;">📋 Nuevo informe de jugador (registrado)</h3>', unsafe_allow_html=True)
+            st.write("### 📋 Nuevo informe de jugador (registrado)")
 
             if df.empty:
                 columnas = ["Fecha informe", "Scout","Temporada", "Competición", "Equipo local", "Equipo visitante", "Jugador", "Posición", "Lateralidad", "Acción", "Observaciones"] + ATRIBUTOS_VALORABLES + ATRIBUTOS_PORCENTAJE
+
             else:
                 columnas = df.columns.tolist()
-
             scouts_df, _ = load_table("Scouts")
             jugadores_df, _ = load_table("Jugadores")
             posiciones_df, _ = load_table("Posiciones")
@@ -556,27 +541,31 @@ if menu == "Formulario":
 
             # Fecha del informe
             fecha_informe = st.date_input("Fecha del informe", value=date.today(), key="ni_fecha")
+            # Guardamos en formato DD-MM-AAAA
             nuevo_informe["Fecha informe"] = fecha_informe.strftime("%d-%m-%Y")
+
 
             # Campos descriptivos (en una sola columna)
             campos_descriptivos = [col for col in columnas
                 if col not in ["Sub 23", "Fecha de nacimiento", "Club", "Acción", "Observaciones", "Fecha informe"]
                 + ATRIBUTOS_VALORABLES + ATRIBUTOS_PORCENTAJE]
-
             for idx, col_name in enumerate(campos_descriptivos):
                 low = col_name.lower()
                 if low == "scout":
                     if st.session_state.role == "admin":
+                        # ✅ Admin puede elegir el scout al que asignar el informe
                         nuevo_informe[col_name] = st.selectbox(
                             f"{col_name}:",
                             scouts_df["Nombre scout"].dropna().unique(),
                             key=f"ni_scout_{idx}"
                         )
                     else:
+                        # ✅ Si es scout, se asigna automáticamente al que ha iniciado sesión
                         nuevo_informe[col_name] = st.session_state.scout_name
                 elif low == "jugador" and not jugadores_df.empty:
                     jugador_sel = st.selectbox(f"{col_name}:", jugadores_df["Nombre jugador"].dropna().unique(), key=f"ni_jugador_{idx}")
                     nuevo_informe[col_name] = jugador_sel
+                    # auto-completar
                     fila = jugadores_df.loc[jugadores_df["Nombre jugador"] == jugador_sel]
                     if not fila.empty:
                         if "Sub 23" in jugadores_df.columns:
@@ -592,24 +581,23 @@ if menu == "Formulario":
                 else:
                     nuevo_informe[col_name] = st.text_input(f"{col_name}:", key=f"ni_txt_{idx}")
 
-            # Atributos (sliders) en 3 columnas adaptativas
+            # Atributos (sliders) en 3 columnas
             atributos = [a for a in columnas if a in ATRIBUTOS_VALORABLES]
             if atributos:
-                st.markdown('<h4 style="font-size:18px;">⚡ Atributos valorables</h4>', unsafe_allow_html=True)
-                num_cols = min(3, len(atributos))
+                st.markdown("#### ⚡ Atributos valorables")
+                num_cols = 3
                 cols_sl = st.columns(num_cols)
                 for idx, attr in enumerate(atributos):
                     c = cols_sl[idx % num_cols]
                     nuevo_informe[attr] = c.slider(attr, 0, 5, 0, 1, key=f"ni_attr_{idx}")
 
-            # Porcentajes (2 columnas adaptativas)
+            # Porcentajes (2 columnas)
             porcentajes = [a for a in columnas if a in ATRIBUTOS_PORCENTAJE]
             if porcentajes:
-                st.markdown('<h4 style="font-size:18px;">📊 Estadísticas</h4>', unsafe_allow_html=True)
-                num_cols = min(2, len(porcentajes))
-                cols_pct = st.columns(num_cols)
+                st.markdown("#### 📊 Estadísticas")
+                c1, c2 = st.columns(2)
                 for idx, stat in enumerate(porcentajes):
-                    target = cols_pct[idx % num_cols]
+                    target = c1 if idx % 2 == 0 else c2
                     nuevo_informe[stat] = target.number_input(stat, min_value=0, max_value=100, step=1, key=f"ni_pct_{idx}")
 
             # Acción y Observaciones
@@ -632,26 +620,32 @@ if menu == "Formulario":
                 st.session_state.show_create_report_form = False
                 st.rerun()
 
+
     # ---------------------------
     # Formulario alternativo (jugador no registrado)
     # ---------------------------
     if st.session_state.get("show_create_unreg_report_form", False):
         with st.form("form_crear_informe_unreg"):
-            st.markdown('<h3 style="font-size:22px; margin-bottom:10px;">📋 Nuevo informe de jugador <b>no registrado</b></h3>', unsafe_allow_html=True)
+            st.write("### 📋 Nuevo informe de jugador **no registrado**")
 
             nuevo_informe = {}
 
-            # Campos del jugador no registrado (igual que antes)
+            # Fecha del informe
             fecha_informe = st.date_input("Fecha del informe", value=date.today(), key="niu_fecha")
             nuevo_informe["Fecha informe"] = fecha_informe.strftime("%d-%m-%Y")
 
+            # Scout
             scouts_df, _ = load_table("Scouts")
             if st.session_state.role == "admin":
+                # ✅ Admin puede elegir el scout al que asignar el informe
                 if not scouts_df.empty:
                     nuevo_informe["Scout"] = st.selectbox(
-                        "Scout:", scouts_df["Nombre scout"].dropna().unique(), key="niu_scout"
+                        "Scout:",
+                        scouts_df["Nombre scout"].dropna().unique(),
+                        key="niu_scout"
                     )
             else:
+                # ✅ Si es scout, se asigna automáticamente al que ha iniciado sesión
                 nuevo_informe["Scout"] = st.session_state.scout_name
 
             # Datos manuales del jugador
@@ -665,27 +659,28 @@ if menu == "Formulario":
             nuevo_informe["Club"] = st.text_input("Club", key="niu_club")
             nuevo_informe["Sub 23"] = st.selectbox("Sub 23", ["Sí", "No"], key="niu_sub23")
 
+            # Posición
             posiciones_df, _ = load_table("Posiciones")
             if not posiciones_df.empty:
                 nuevo_informe["Posición"] = st.selectbox("Posición:", posiciones_df.iloc[:, 0].dropna().unique(), key="niu_pos")
 
+            # Lateralidad
             nuevo_informe["Lateralidad"] = st.selectbox("Lateralidad:", ["Diestro", "Zurdo", "Ambas"], key="niu_lat")
 
-            # Atributos y porcentajes (igual que antes, adaptando columnas)
-            st.markdown('<h4 style="font-size:18px;">⚡ Atributos valorables</h4>', unsafe_allow_html=True)
-            num_cols = min(3, len(ATRIBUTOS_VALORABLES))
+            # Atributos (sliders)
+            st.markdown("#### ⚡ Atributos valorables")
+            num_cols = 3
             cols_sl = st.columns(num_cols)
             for idx, attr in enumerate(ATRIBUTOS_VALORABLES):
-                cols_sl[idx % num_cols].slider(attr, 0, 5, 0, 1, key=f"nr_attr_{idx}")
-                nuevo_informe[attr] = st.session_state.get(f"nr_attr_{idx}", 0)
+                nuevo_informe[attr] = cols_sl[idx % num_cols].slider(attr, 0, 5, 0, 1, key=f"nr_attr_{idx}")
 
+            # Porcentajes
             porcentajes = [a for a in df.columns if a in ATRIBUTOS_PORCENTAJE]
             if porcentajes:
-                st.markdown('<h4 style="font-size:18px;">📊 Estadísticas</h4>', unsafe_allow_html=True)
-                num_cols = min(2, len(porcentajes))
-                cols_pct = st.columns(num_cols)
+                st.markdown("#### 📊 Estadísticas")
+                c1, c2 = st.columns(2)
                 for idx, stat in enumerate(porcentajes):
-                    target = cols_pct[idx % num_cols]
+                    target = c1 if idx % 2 == 0 else c2
                     nuevo_informe[stat] = target.number_input(stat, min_value=0, max_value=100, step=1, key=f"niu_pct_{idx}")
 
             # Acción y Observaciones
@@ -697,8 +692,10 @@ if menu == "Formulario":
             cancelar = col_cancel.form_submit_button("❌ Cancelar")
 
             if guardar and nuevo_informe.get("Jugador", "").strip():
+                # Guardar informe en Informes
                 add_new_record("Informes", nuevo_informe)
 
+                # Guardar también el jugador en la tabla Jugadores si no existe
                 jugadores_df, jugadores_path = load_table("Jugadores")
                 nombre_jugador = nuevo_informe["Jugador"]
 
@@ -719,11 +716,9 @@ if menu == "Formulario":
                 st.success("Nuevo informe (jugador no registrado) añadido correctamente ✅")
                 st.session_state.show_create_unreg_report_form = False
                 st.rerun()
-
             if cancelar:
                 st.session_state.show_create_unreg_report_form = False
                 st.rerun()
-
 
 # === Pestaña Comparativa ===
 if menu == "Comparativa":
