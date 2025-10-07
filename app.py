@@ -7,6 +7,8 @@ from fpdf import FPDF
 import matplotlib.pyplot as plt
 import numpy as np
 import plotly.express as px
+import math
+from PIL import Image
 
 # === LOGIN CON ROLES ===
 USERS = {
@@ -103,6 +105,164 @@ if "show_create_player_form" not in st.session_state:
 if "show_create_report_form" not in st.session_state:
     st.session_state.show_create_report_form = False
 
+def _insert_image_safely(pdf, img_path, w_mm=90, x=None, pad_bottom=6, title=None):
+    """
+    Inserta una imagen respetando saltos de página:
+      - Mantiene proporción calculando h a partir de w.
+      - Si no cabe en la página actual, añade página.
+      - Coloca un título (opcional) encima.
+      - Ajusta el cursor al final de la imagen + padding.
+    """
+    
+    # Medidas y márgenes
+    page_h = getattr(pdf, "h", 297)  # A4 por defecto en mm
+    left_margin  = getattr(pdf, "l_margin", 10)
+    bottom_margin = getattr(pdf, "b_margin", 10)
+    
+    # Posición X por defecto
+    if x is None:
+        x = left_margin
+
+    # Altura de la imagen en mm (preservando aspecto)
+    with Image.open(img_path) as im:
+        w_px, h_px = im.size
+    aspect = (h_px / float(w_px)) if w_px else 1.0
+    h_mm = w_mm * aspect
+
+    # Altura extra si hay título
+    title_h = 0
+    if title:
+        title_h = 6
+        if pdf.get_y() + title_h > page_h - bottom_margin:
+            pdf.add_page()
+    
+    # Comprobar si la imagen cabe; si no, saltar de página
+    if pdf.get_y() + title_h + h_mm > page_h - bottom_margin:
+        pdf.add_page()
+
+    # Título (opcional)
+    if title:
+        pdf.set_font("Helvetica", "B", 11)
+        pdf.set_x(x)
+        pdf.cell(0, 6, title, ln=1)
+    
+    # Dibujo de imagen
+    y = pdf.get_y()
+    pdf.image(img_path, x=x, y=y, w=w_mm)
+    pdf.set_y(y + h_mm + pad_bottom)
+
+#Gráfico Radar Informe vs media
+def _build_radar_image_union(current_vals: dict, mean_vals: dict, out_path: str, title: str = ""):
+    """
+    Variante: incluye categorías si al menos una serie tiene valor > 0.
+    - En el eje donde una de las dos series no tenga valor > 0, esa serie se grafica con 0.
+    """
+
+    all_keys = set(current_vals.keys()) | set(mean_vals.keys())
+
+    def _clean(v):
+        try:
+            x = float(v)
+            return 0.0 if math.isnan(x) else x
+        except Exception:
+            return 0.0
+
+    raw_curr = {k: _clean(current_vals.get(k, 0)) for k in all_keys}
+    raw_mean = {k: _clean(mean_vals.get(k, 0)) for k in all_keys}
+    attrs = [k for k in sorted(all_keys) if (raw_curr[k] > 0 or raw_mean[k] > 0)]
+
+    # Placeholder si no hay suficientes ejes
+    if len(attrs) < 3:
+        fig = plt.figure(figsize=(3.35, 3.35), dpi=300)
+        plt.text(0.5, 0.5, "Sin suficientes\natributos válidos", ha='center', va='center')
+        plt.axis('off')
+        fig.savefig(out_path, bbox_inches='tight', pad_inches=0.1)
+        plt.close(fig)
+        return
+
+    values_curr = [raw_curr.get(a, 0.0) for a in attrs]
+    values_mean = [raw_mean.get(a, 0.0) for a in attrs]
+    values_curr += values_curr[:1]
+    values_mean += values_mean[:1]
+
+    N = len(attrs)
+    angles = np.linspace(0, 2*np.pi, N, endpoint=False).tolist()
+    angles += angles[:1]
+
+    fig = plt.figure(figsize=(3.35, 3.35), dpi=300)  # ≈ 85 x 85 mm
+    ax = plt.subplot(111, polar=True)
+
+    ax.set_theta_offset(np.pi / 2)
+    ax.set_theta_direction(-1)
+    ax.set_xticks(angles[:-1])
+    ax.set_xticklabels(attrs, fontsize=7)
+    ax.set_rlabel_position(0)
+    ax.set_ylim(0, 5)
+    ax.set_yticks([1, 2, 3, 4, 5])
+
+    ax.plot(angles, values_curr, linewidth=2)
+    ax.fill(angles, values_curr, alpha=0.15)
+    ax.plot(angles, values_mean, linewidth=2)
+    ax.fill(angles, values_mean, alpha=0.15)
+
+    if title:
+        ax.set_title(title, va='bottom', fontsize=9)
+
+    fig.tight_layout(pad=0.6)
+    fig.savefig(out_path, bbox_inches='tight', pad_inches=0.1)
+    plt.close(fig)
+
+def _insert_two_images_row(pdf, left_img_path, right_img_path, w_mm=90, gap_mm=8, pad_bottom=8):
+    """
+    Inserta dos imágenes alineadas horizontalmente en la misma fila:
+      - Ajusta Y para que ambas queden a la misma altura (sin 'diagonal').
+      - Calcula la altura mayor y mueve el cursor por debajo de la fila.
+      - Si no cabe la fila completa, salta de página antes de dibujar.
+
+    Si 2*w_mm + gap + márgenes > ancho de página, reduce w_mm automáticamente.
+    """
+    from PIL import Image
+
+    page_w = getattr(pdf, "w", 210)   # A4 ancho mm
+    page_h = getattr(pdf, "h", 297)   # A4 alto  mm
+    lmar   = getattr(pdf, "l_margin", 10)
+    rmar   = getattr(pdf, "r_margin", 10)
+    bmar   = getattr(pdf, "b_margin", 10)
+
+    # Asegurar que caben dos imágenes; si no, recalcular w_mm
+    total_needed = 2 * w_mm + gap_mm + lmar + rmar
+    if total_needed > page_w:
+        w_mm = (page_w - lmar - rmar - gap_mm) / 2.0
+
+    # Alturas preservando aspecto
+    def _img_h_mm(p, w_target):
+        with Image.open(p) as im:
+            w_px, h_px = im.size
+        aspect = (h_px / float(w_px)) if w_px else 1.0
+        return w_target * aspect
+
+    h_left  = _img_h_mm(left_img_path,  w_mm)
+    h_right = _img_h_mm(right_img_path, w_mm)
+    row_h   = max(h_left, h_right)
+
+    # ¿Cabe la fila completa? si no, salto de página
+    y0 = pdf.get_y()
+    if y0 + row_h > page_h - bmar:
+        pdf.add_page()
+        y0 = pdf.get_y()
+
+    # Coordenadas
+    x_left  = lmar
+    x_right = lmar + w_mm + gap_mm
+
+    # Insertar ambas a la MISMA y
+    pdf.image(left_img_path,  x=x_left,  y=y0, w=w_mm)
+    pdf.image(right_img_path, x=x_right, y=y0, w=w_mm)
+
+    # Avanzar cursor bajo la fila
+    pdf.set_y(y0 + row_h + pad_bottom)
+
+
 #  FUNCIÓN DE GENERACIÓN DE PDF (FPDF2) #
 def generar_pdf(informe, logo_path="ud_lanzarote_logo3.png", logo_path_wm="ud_lanzarote_logo3bn.png", ttf_path="DejaVuSans.ttf"):
     """
@@ -158,7 +318,7 @@ def generar_pdf(informe, logo_path="ud_lanzarote_logo3.png", logo_path_wm="ud_la
     # Subtítulo con fecha y scout
     pdf.set_y(pdf.get_y() + 5)  # añadimos 10 mm de espacio
     pdf.set_font("DejaVu", "", 12+1)
-    subt = f"Fecha de informe: {informe.get('Fecha informe','')}    -    Scout: {informe.get('Scout','')}"
+    subt = f"Fecha: {informe.get('Fecha informe','')}    -    Scout: {informe.get('Scout','')}"
     pdf.cell(page_w, 7, subt, ln=1, align="C")
 
     pdf.ln(12)
@@ -233,7 +393,96 @@ def generar_pdf(informe, logo_path="ud_lanzarote_logo3.png", logo_path_wm="ud_la
             pdf.multi_cell(val_col, row_h, f"{val}%", border=0, align="C")
             pdf.set_xy(left_x, max(y_after_name, pdf.get_y()))
     pdf.ln(8)
-        
+
+        # === SECCIÓN DE GRÁFICOS RADAR ===
+    try:
+        # --- Radar 1: Informe actual vs Media del jugador ---
+        informes_df, _ = load_table("Informes")
+
+        jugador = informe.get("Jugador", "")
+        # Serie actual
+        curr_vals = {}
+        for attr in ATRIBUTOS_VALORABLES:
+            v = pd.to_numeric(informe.get(attr, None), errors="coerce")
+            if pd.notna(v):
+                curr_vals[attr] = float(v)
+
+        # Media del jugador (ignorando ceros y NaN)
+        mean_vals = {}
+        if jugador and not informes_df.empty and "Jugador" in informes_df.columns:
+            df_j = informes_df[informes_df["Jugador"] == jugador].copy()
+            if not df_j.empty:
+                for attr in ATRIBUTOS_VALORABLES:
+                    if attr in df_j.columns:
+                        col = pd.to_numeric(df_j[attr], errors="coerce").replace(0, np.nan)
+                        m = col.mean(skipna=True)
+                        if pd.notna(m) and m > 0:
+                            mean_vals[attr] = float(m)
+
+        # --- Radar 2: Media del jugador vs Media de su posición ---
+        informes_all, _ = load_table("Informes")
+
+        # Detectar columna de posición
+        pos_col = None
+        for cand in ["Posición", "Posicion", "position", "Position"]:
+            if cand in informes_all.columns:
+                pos_col = cand
+                break
+
+        jugador_pos = None
+        if pos_col:
+            df_j_all = informes_all[informes_all["Jugador"] == jugador]
+            if not df_j_all.empty:
+                jugador_pos = df_j_all.iloc[0][pos_col]
+
+        # Medias de jugador (>0)
+        player_mean = {}
+        for a in ATRIBUTOS_VALORABLES:
+            v = mean_vals.get(a, None)
+            if v is not None and float(v) > 0:
+                player_mean[a] = float(v)
+
+        # Media de su posición (ignorando 0 -> NaN)
+        pos_mean = {}
+        if jugador_pos and pos_col:
+            df_pos = informes_all[informes_all[pos_col] == jugador_pos].copy()
+            if not df_pos.empty:
+                for a in ATRIBUTOS_VALORABLES:
+                    if a in df_pos.columns:
+                        s = pd.to_numeric(df_pos[a], errors="coerce").replace(0, np.nan)
+                        m = s.mean(skipna=True)
+                        if pd.notna(m) and m > 0:
+                            pos_mean[a] = float(m)
+
+        # === GENERAR Y COLOCAR LOS DOS RADARES LADO A LADO ===
+        if len(curr_vals) >= 1 and len(mean_vals) >= 1 and len(pos_mean) >= 1:
+            img_left = f"_radar1_{jugador_safe}_{fecha_safe}.png"
+            _build_radar_image_union(
+                curr_vals, mean_vals, img_left,
+                title=f"{jugador} — Informe vs Media"
+            )
+
+            img_right = f"_radar2_{jugador_safe}_{fecha_safe}.png"
+            _build_radar_image_union(
+                player_mean, pos_mean, img_right,
+                title=f"{jugador} — Media vs {jugador_pos or 'Posición'}"
+            )
+
+            # Colocar ambos perfectamente alineados
+            _insert_two_images_row(pdf, img_left, img_right, w_mm=90, gap_mm=8, pad_bottom=10)
+
+            # Limpiar archivos temporales
+            for p in [img_left, img_right]:
+                try:
+                    os.remove(p)
+                except:
+                    pass
+
+    except Exception as e:
+        # Evita que errores gráficos rompan la exportación
+        pass
+
+
     # Observaciones
     obs = informe.get("Observaciones", "")
     if obs:
